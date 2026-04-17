@@ -26,7 +26,31 @@ This project demonstrates a complete DevOps pipeline:
 
 
 
-\## 📅 Status
+\## 📅 Progress
 
-Day 1 Completed - Project Setup
+
+
+\### Day 1:
+
+\- Project setup with Flask app
+
+\- Added health endpoint
+
+\- Versioned application
+
+
+
+\### Day 2:
+
+\- Dockerized the application
+
+\- Created optimized Dockerfile
+
+\- Built Docker image
+
+\- Ran container successfully
+
+
+
+
 
