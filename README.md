@@ -52,5 +52,43 @@ This project demonstrates a complete DevOps pipeline:
 
 
 
+\## ☸️ Kubernetes Setup
 
+
+
+\### Deployment
+
+\- Created Deployment with 2 replicas
+
+\- Used labels and selectors
+
+
+
+\### Service
+
+\- Exposed using NodePort
+
+\- Accessed via Minikube
+
+
+
+\### Scaling
+
+\- Scaled pods from 2 → 4 → 2
+
+
+
+\### Commands Used
+
+
+
+```bash
+
+kubectl apply -f k8s/deployment.yaml
+
+kubectl apply -f k8s/service.yaml
+
+kubectl get pods
+
+kubectl scale deployment flask-app --replicas=4
 
