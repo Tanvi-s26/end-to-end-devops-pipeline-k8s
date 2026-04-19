@@ -55,7 +55,6 @@ This project demonstrates a complete DevOps pipeline:
 \## ☸️ Kubernetes Setup
 
 
-
 \### Deployment
 
 \- Created Deployment with 2 replicas
@@ -92,3 +91,8 @@ kubectl get pods
 
 kubectl scale deployment flask-app --replicas=4
 
+---
+
+![Pods](pods-output.png)
+
+---
