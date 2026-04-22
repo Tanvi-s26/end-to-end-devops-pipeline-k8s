@@ -1,0 +1,6 @@
+containers:
+- name: flask-container
+  image: tanvii17/flask-app:latest
+  imagePullPolicy: Always
+  ports:
+  - containerPort: 5000

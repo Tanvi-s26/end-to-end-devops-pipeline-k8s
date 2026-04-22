@@ -25,11 +25,4 @@ jobs:
     - name: Push Docker Image
       run: docker push ${{ secrets.DOCKER_USERNAME }}/flask-app:latest
 
-    - name: Set up Kubeconfig
-      run: |
-        mkdir -p $HOME/.kube
-        echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
-
-    - name: Deploy to Kubernetes
-      run: |
-        kubectl set image deployment/flask-app flask-container=tanvii17/flask-app:latest
+   
