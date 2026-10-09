@@ -1,126 +1,200 @@
-# 🚀 End-to-End DevOps Pipeline with Kubernetes
+# End-to-End DevOps Pipeline: Flask on Kubernetes
 
-This project demonstrates a complete DevOps workflow where a simple Flask application is containerized, automated using CI/CD, and deployed on Kubernetes.
+A containerized Flask service with an automated image build pipeline (GitHub Actions to Docker Hub) and a Kubernetes deployment running on Minikube. The project documents the full path from application code to a running, scalable workload, including the failure modes encountered along the way.
 
-Instead of only following steps, I built this project by debugging real issues and understanding each layer deeply.
+## Table of Contents
 
----
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Repository Structure](#repository-structure)
+- [Application](#application)
+- [Container Image](#container-image)
+- [CI Pipeline](#ci-pipeline)
+- [Kubernetes Deployment](#kubernetes-deployment)
+- [Running Locally](#running-locally)
+- [Design Decisions](#design-decisions)
+- [Troubleshooting Log](#troubleshooting-log)
+- [Current Limitations and Roadmap](#current-limitations-and-roadmap)
 
-## 🧠 What this project covers
+## Architecture
 
-- Building a Flask application
-- Dockerizing the application
-- Automating build and push using GitHub Actions
-- Deploying on Kubernetes using Minikube
-- Exposing the application using NodePort
-- Scaling pods dynamically
-- Debugging deployment and image version issues
+```mermaid
+flowchart LR
+    Dev[Developer] -->|git push| GH[GitHub Repository]
+    GH -->|triggers| GA[GitHub Actions]
 
----
+    subgraph CI [Continuous Integration]
+        GA --> B[Build Docker image]
+        B --> P[Push image]
+    end
 
-## 🏗️ Architecture
+    P --> DH[(Docker Hub)]
 
-```text
-Flask App → Docker → GitHub Actions → Docker Hub → Kubernetes → Browser
+    subgraph K8S [Kubernetes - Minikube]
+        D[Deployment: flask-app, 2 replicas]
+        S[Service: NodePort]
+        D --> S
+    end
+
+    DH -.->|manual image pull or local build| D
+    S --> U[Browser / curl]
 ```
 
----
+The CI stage is automated. The deployment stage is currently performed manually with `kubectl`, because GitHub-hosted runners cannot reach a local Minikube cluster. See [Current Limitations and Roadmap](#current-limitations-and-roadmap).
 
-## 📅 Progress Breakdown
+## Tech Stack
 
-### 📍 Day 1 – Application Setup
-- Created Flask application
-- Added version endpoint
-- Structured project folders
+| Layer | Tool |
+|---|---|
+| Application | Python 3.12, Flask 3 |
+| WSGI server | Gunicorn |
+| Containerization | Docker |
+| CI | GitHub Actions |
+| Registry | Docker Hub |
+| Orchestration | Kubernetes (Minikube) |
 
----
+## Repository Structure
 
-### 📍 Day 2 – Dockerization
-- Created Dockerfile
-- Built Docker image
-- Ran container locally
-
-```bash
-docker build -t flask-app:v1 .
-docker run -d -p 5000:5000 flask-app:v1
+```
+.
+├── .github/workflows/
+│   └── main.yml            # CI workflow: build and push image
+├── app/
+│   └── app.py              # Flask application
+├── k8s/
+│   ├── deployment.yaml     # Deployment manifest
+│   └── service.yaml        # NodePort Service manifest
+├── Dockerfile
+├── requirements.txt
+├── .dockerignore
+└── pods-output.png         # Screenshot of running pods
 ```
 
----
+## Application
 
-### 📍 Day 3 – Kubernetes Deployment
-- Created Deployment and Service YAML files
-- Deployed application on Minikube
-- Exposed application using NodePort
-- Tested scaling
+A minimal Flask service exposing two endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `/` | Returns the application banner and version string |
+| `/health` | Returns `{"status": "OK"}`; intended for liveness and readiness checks |
+
+## Container Image
+
+The image is built from `python:3.12-slim` with the following properties:
+
+- **Production server.** The application runs under Gunicorn (2 workers) instead of Flask's development server.
+- **Non-root execution.** The process runs as `appuser` (UID 10001), which limits the impact of a container compromise.
+- **Layer caching.** `requirements.txt` is copied and installed before the application code, so dependency layers are rebuilt only when dependencies change.
+- **Clean runtime.** `PYTHONDONTWRITEBYTECODE` and `PYTHONUNBUFFERED` are set so no bytecode is written and logs stream directly to the container output.
+
+Verify non-root execution:
 
 ```bash
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
+docker run --rm flask-app:test whoami
+# appuser
+```
+
+## CI Pipeline
+
+The workflow in `.github/workflows/main.yml` runs on pushes to `main`. It:
+
+1. Checks out the repository.
+2. Authenticates to Docker Hub using repository secrets (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`).
+3. Builds the Docker image.
+4. Pushes the image to Docker Hub.
+
+Registry credentials are stored as GitHub encrypted secrets and are never committed to the repository.
+
+## Kubernetes Deployment
+
+| Resource | Details |
+|---|---|
+| Deployment `flask-app` | 2 replicas, container port 5000 |
+| Service `flask-service` | NodePort, exposes the Deployment outside the cluster |
+
+The Deployment currently uses the locally built image `flask-app:v2` with `imagePullPolicy: Never`, so the image must exist inside the Minikube node before applying the manifests. See [Running Locally](#running-locally).
+
+![Pods running on Minikube](pods-output.png)
+
+## Running Locally
+
+**Prerequisites:** Docker, Minikube, kubectl.
+
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/Tanvi-s26/end-to-end-devops-pipeline-k8s.git
+cd end-to-end-devops-pipeline-k8s
+```
+
+**2. Run the container on its own (optional smoke test)**
+
+```bash
+docker build -t flask-app:test .
+docker run -d -p 5000:5000 --name flask-test flask-app:test
+curl http://localhost:5000/health
+docker rm -f flask-test
+```
+
+Allow a few seconds after `docker run` for Gunicorn to finish starting before sending the request.
+
+**3. Deploy to Minikube**
+
+```bash
+minikube start
+minikube image build -t flask-app:v2 .
+kubectl apply -f k8s/
 kubectl get pods
-kubectl get svc
+```
+
+**4. Access the service**
+
+```bash
+minikube service flask-service --url
+```
+
+**5. Scale the deployment**
+
+```bash
 kubectl scale deployment flask-app --replicas=4
-```
-
----
-
-### 📍 Day 4 – CI/CD Pipeline
-- Created GitHub Actions workflow
-- Automated Docker build and push process
-- Connected Docker Hub with GitHub secrets
-
----
-
-### 📍 Day 5 – Deployment Debugging & Version Upgrade
-- Worked on image version upgrade (`v1 → v2`)
-- Solved Kubernetes image caching issue
-- Updated deployment with new image version
-- Restarted pods successfully
-
----
-
-## 🐳 Docker Commands Used
-
-```bash
-docker build -t flask-app:v1 .
-docker run -d -p 5000:5000 flask-app:v1
-docker build -t flask-app:v2 .
-```
-
----
-
-## ☸️ Kubernetes Commands Used
-
-```bash
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
 kubectl get pods
-kubectl get svc
-kubectl delete pods --all
-kubectl rollout restart deployment flask-app
-minikube service flask-service
 ```
 
----
+**6. Roll out a new version**
 
-## 📸 Project Output
+```bash
+minikube image build -t flask-app:v3 .
+kubectl set image deployment/flask-app flask-container=flask-app:v3
+kubectl rollout status deployment/flask-app
+```
 
-### Kubernetes Pods Running
-![Pods Output](pods-output.png)
+## Design Decisions
 
----
+**Gunicorn instead of the Flask development server.** The built-in server is single-purpose tooling for development and is not intended to handle production traffic.
 
-## ⚠️ Key Learnings
+**Non-root container user.** Running as an unprivileged user is a baseline container hardening practice and a common requirement of cluster security policies.
 
-- `latest` image tag can create caching issues
-- Kubernetes deployment updates require image version changes
-- GitHub Actions cannot directly deploy to local Minikube
-- Debugging with `kubectl logs` and `kubectl describe` is essential
-- Real learning comes from solving deployment errors
+**Versioned image tags instead of `latest`.** Kubernetes only rolls out a change when the Pod template changes. Re-pushing `latest` leaves the manifest unchanged, so no rollout happens and nodes may keep serving a cached image. A new tag changes the template and triggers a controlled rolling update.
 
----
+**NodePort Service.** NodePort is sufficient for a single-node Minikube cluster. A cloud deployment would use a LoadBalancer Service or an Ingress controller.
 
-## 💡 Final Note
+## Troubleshooting Log
 
-This project helped me understand the real DevOps workflow from application development to deployment and debugging.
+| Symptom | Root cause | Resolution |
+|---|---|---|
+| New code not visible after redeploy | Image tag unchanged (`latest`), so the Deployment spec did not change and the node reused its cached image | Switched to explicit version tags and `kubectl rollout restart` |
+| `kubectl apply` failed on a root-level manifest | The file contained only a `containers:` fragment, with no `apiVersion`, `kind` or `metadata` | Removed the duplicate and kept a single complete manifest under `k8s/` |
+| `curl` returned "Empty reply from server" right after `docker run` | The port was published before Gunicorn had finished booting | Waited for readiness; this behavior is the motivation for adding readiness probes |
+| GitHub Actions could not deploy to the cluster | Hosted runners cannot reach a Minikube instance on a local machine | Scoped CI to build and push; automated deployment to a reachable cluster is on the roadmap |
 
-The most valuable learning was not only building the pipeline but understanding how to fix issues when the system breaks.
+## Current Limitations and Roadmap
+
+This repository demonstrates the build and deploy workflow. The following items are known gaps and the planned next work:
+
+- [ ] Add liveness and readiness probes (using `/health`), resource requests and limits, and an explicit rolling update strategy to the Deployment
+- [ ] Add automated tests and linting to the CI workflow
+- [ ] Add container image vulnerability scanning (Trivy) as a CI gate
+- [ ] Tag images with the commit SHA instead of manual version tags
+- [ ] Automate deployment from the pipeline to a cluster reachable from CI
+- [ ] Add monitoring with Prometheus and Grafana
